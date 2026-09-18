@@ -13,23 +13,22 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 DOCKER_DEFAULT_RANGE = ipaddress.ip_network('172.0.0.0/8')
 
 
-def is_internal(ip):
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
-        return False
-    if addr in DOCKER_DEFAULT_RANGE:  # Docker-bridgenetwerk telt hier als extern
-        return False
-    return addr.is_loopback or addr.is_private
-
-def my_is_internal(ip):
+def is_external(ip):
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
     if addr in DOCKER_DEFAULT_RANGE:  # Docker-bridgenetwerk telt hier als extern
         return True
-    return not (addr.is_loopback or addr.is_private)
+    return not (addr.is_private or addr.is_loopback)
+
+def is_internal(ip): #blocks connections from 127.x addresses and localhost, but allows connections from private IP ranges (e.g., 192.168.x.x, 10.x.x.x, 172.16.x.x - 172.31.x.x)
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr.is_loopback: return True
+    return not addr.is_private
 
 @app.route('/fetch')
 def fetch():
@@ -44,16 +43,18 @@ def fetch():
 @app.route('/admin')
 def admin():
     client_ip = request.remote_addr
-    admin_content = """
-    <h1>Admin Pagina</h1>
-    <p>Welkom op de beheerpagina. Deze pagina is alleen bedoeld voor beheerders. Deze pagina is normaal gesproken alleen bereikbaar vanaf de server waar deze applicatie op draait.</p>
-    <ul>
-        <li>Gebruikersbeheer</li>
-        <li>Systeeminstellingen</li>
-        <li>Logbestanden</li>
-    </ul>
-    """ if my_is_internal(client_ip) else "<p>Je bevindt je op een intern adres, het beheerdersgedeelte is hier niet zichtbaar.</p>"
-
+    admin_content = ""
+    if is_external(client_ip): admin_content = "<p>Je bevindt je op een extern adres, het beheerdersgedeelte is hier niet zichtbaar.</p>"
+    elif is_internal(client_ip): admin_content = "<p>Je bevindt je op een intern adres, het beheerdersgedeelte is hier niet zichtbaar.</p>"
+    else: admin_content = """
+        <h1>Admin Pagina</h1>
+        <p>Welkom op de beheerpagina. Deze pagina is alleen bedoeld voor beheerders. Deze pagina is normaal gesproken alleen bereikbaar vanaf de server waar deze applicatie op draait.</p>
+        <ul>
+            <li>Gebruikersbeheer</li>
+            <li>Systeeminstellingen</li>
+            <li>Logbestanden</li>
+        </ul>
+        """
     return f"""
     <p>Je IP-adres: {client_ip}</p>
     {admin_content}
