@@ -22,6 +22,14 @@ def is_internal(ip):
         return False
     return addr.is_loopback or addr.is_private
 
+def my_is_internal(ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    if addr in DOCKER_DEFAULT_RANGE:  # Docker-bridgenetwerk telt hier als extern
+        return True
+    return not (addr.is_loopback or addr.is_private)
 
 @app.route('/fetch')
 def fetch():
@@ -44,7 +52,7 @@ def admin():
         <li>Systeeminstellingen</li>
         <li>Logbestanden</li>
     </ul>
-    """ if is_internal(client_ip) else "<p>Je bevindt je op een extern adres, het beheerdersgedeelte is hier niet zichtbaar.</p>"
+    """ if my_is_internal(client_ip) else "<p>Je bevindt je op een intern adres, het beheerdersgedeelte is hier niet zichtbaar.</p>"
 
     return f"""
     <p>Je IP-adres: {client_ip}</p>
